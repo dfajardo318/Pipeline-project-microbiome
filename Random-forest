@@ -1,0 +1,58 @@
+module load bioinfo
+module load Qiime/2-2022.8
+module list
+
+#Had to modify metadata since Ice-machine only had one sample which didn't permit the code to run
+#Modified metadata named as Metadata_projectRANA2.tsv
+
+qiime sample-classifier classify-samples \
+  --i-table table.qza \
+  --m-metadata-file Metadata_projectRANA2.tsv \
+  --m-metadata-column location_store \
+  --p-missing-samples ignore \  #This command ignores the Ice-machine sample mentioned before 
+  --p-optimize-feature-selection \
+  --p-parameter-tuning \
+  --p-estimator RandomForestClassifier \
+  --p-n-estimators 50 \
+  --p-random-state 123 \
+  --output-dir moving-pictures-classifier
+  
+  qiime metadata tabulate \
+  --m-input-file random-forest/predictions.qza \
+  --o-visualization random-forest/predictions.qzv
+
+qiime metadata tabulate \
+  --m-input-file random-forest/probabilities.qza \
+  --o-visualization random-forest/probabilities.qzv
+
+qiime metadata tabulate \
+  --m-input-file random-forest/feature_importance.qza \
+  --o-visualization random-forest/feature_importance.qzv
+
+qiime feature-table filter-features \
+  --i-table table.qza \
+  --m-metadata-file random-forest/feature_importance.qza \
+  --o-filtered-table random-forest/important-feature-table.qza
+
+qiime sample-classifier heatmap \
+  --i-table table.qza \
+  --i-importance random-forest/feature_importance.qza \
+  --m-sample-metadata-file Metadata_projectRANA2.tsv \
+  --m-sample-metadata-column location_store \
+  --p-missing-samples ignore \
+  --p-group-samples \
+  --p-feature-count 30 \
+  --o-filtered-table random-forest/important-feature-table-top-30.qza \
+  --o-heatmap random-forest/important-feature-heatmap.qzv
+
+qiime sample-classifier heatmap \
+--i-table table.qza \
+--i-importance random-forest/feature_importance.qza  \
+--m-sample-metadata-file Metadata_projectRANA2.tsv  \
+--m-sample-metadata-column location_store \
+--m-feature-metadata-file taxonomy.qza \
+--m-feature-metadata-column Taxon \
+--p-group-samples  \
+--p-feature-count 30  \
+--o-filtered-table random-forest/important-feature-table-taxonomy-top-30.qza \
+--o-heatmap random-forest/important-feature-heatmap-taxonomy.qzv
