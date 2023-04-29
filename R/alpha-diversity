@@ -1,0 +1,228 @@
+library(tidyverse)
+library(qiime2R)
+library(ggpubr)
+
+meta<-read_q2metadata("RetailDeli_Metadata_mod1.txt")
+str(meta)
+colnames(meta)[5] <- "location_store"
+colnames(meta)[6] <- "location_rough"
+colnames(meta)[8] <- "month"
+colnames(meta)[9] <- "year"
+str(meta)
+
+evenness = read_qza("evenness_vector.qza")
+evenness<-evenness$data %>% rownames_to_column("SampleID") # this moves the sample names to a new column that matches the metadata and allows them to be merged
+
+observed_features = read_qza("observed_features_vector.qza")
+observed_features<-observed_features$data %>% rownames_to_column("SampleID") # this moves the sample names to a new column that matches the metadata and allows them to be merged
+
+shannon = read_qza("shannon_vector.qza")
+shannon<-shannon$data %>% rownames_to_column("SampleID") # this moves the sample names to a new column that matches the metadata and allows them to be merged
+
+faith_pd = read_qza("faith_pd_vector.qza")
+faith_pd<-faith_pd$data %>% rownames_to_column("SampleID") # this moves the sample names to a new column that matches the metadata and allows them to be merged\
+faith_pd <- faith_pd[,-1]
+colnames(faith_pd)[1] <- "SampleID"
+colnames(faith_pd)[2] <- "faith_pd"
+
+str(meta)
+
+alpha_diversity = merge(x=faith_pd, y=evenness, by.x = "SampleID", by.y = "SampleID")
+alpha_diversity = merge(alpha_diversity, observed_features, by.x = "SampleID", by.y = "SampleID")
+alpha_diversity = merge(alpha_diversity, shannon, by.x = "SampleID", by.y = "SampleID")
+meta = merge(meta, alpha_diversity, by.x = "SampleID", by.y = "SampleID")
+row.names(meta) <- meta$SampleID
+
+str(meta)
+
+#Plots
+hist(meta$shannon_entropy, main="shannon_vector.qza", xlab="", breaks=10)
+hist(meta$faith_pd, main="Faith phylogenetic diversity", xlab="", breaks=10)
+hist(meta$pielou_e, main="Evenness", xlab="", breaks=10)
+hist(as.numeric(meta$observed_features), main="Observed Features", xlab="", breaks=10)
+
+#Plots the qq-plot for residuals
+ggqqplot(meta$shannon_entropy, title = "Shannon")
+ggqqplot(meta$faith_pd, title = "Faith PD")
+ggqqplot(meta$pielou_e, title = "Evenness")
+ggqqplot(meta$observed_features, title = "Observed Features")
+
+shapiro.test(meta$shannon)
+shapiro.test(meta$faith_pd)
+shapiro.test(meta$pielou_e)
+shapiro.test(meta$observed_features)
+
+#Run the ANOVA and save it as an object
+aov.evenness.location_store = aov(pielou_evenness ~ location_store, data=meta)
+
+summary(aov.evenness.location_store)
+
+TukeyHSD(aov.evenness.location_store)
+
+levels(meta$location_store)
+
+#Re-order the groups because the default is alphabetical order
+meta$location_store.ord = factor(meta$location_store, c("1-Basin_Sink_Interior", "3-Basin_Sink_FWJ", "Cold_Room_Drain", "Cold_Room_Storage_Rack", "Deli_Area_Drain", "Deli_Case", "Floor", "Ice_Machine_Drain", "Scale", "Scale-Basin", "Shop_Vac", "Squeegee", "Standing_Water", "Trash", "U_Boat", "Wheeled_Cart"))
+levels(meta$location_store.ord)
+
+#Plot
+boxplot(pielou_evenness ~ location_store, data=meta, ylab="Peilou evenness")
+
+evenness <- ggplot(meta, aes(location_store, pielou_evenness)) + 
+  geom_boxplot() + 
+  #ylim(c(0.5,1)) +
+  theme_q2r() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+ggsave("output/evenness.png", evenness, height = 3, width = 4)
+
+# Now, the above graph is kind of not correct. Our test and our graphic do not exactly match. ANOVA and Tukey are tests based on the mean, but the boxplot plots the median. Its not wrong, its just not the best method. Unfortunately plotting the average and standard deviation is a little complicated.
+
+evenness_summary <- meta %>% # the names of the new data frame and the data frame to be summarised
+  group_by(location_store.ord) %>%   # the grouping variable
+  summarise(mean_evenness = mean(pielou_evenness),  # calculates the mean of each group
+            sd_evenness = sd(pielou_evenness), # calculates the standard deviation of each group
+            n_evenness = n(),  # calculates the sample size per group
+            se_evenness = sd(pielou_evenness)/sqrt(n())) # calculates the standard error of each group
+
+# We can now make a bar plot of means vs body site, with standard 
+# deviations or standard errors as the error bar. The following code 
+# uses the standard deviations.
+my_column <- "location_store"
+
+evenness_se <- ggplot(evenness_summary, aes(location_store.ord, mean_evenness, fill = location_store.ord)) + 
+  geom_col() + 
+  geom_errorbar(aes(ymin = mean_evenness - se_evenness, ymax = mean_evenness + se_evenness), width=0.2) + 
+  theme_q2r() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5, vjust = 0.5)) +
+  theme(legend.title = element_blank()) +
+  labs(y="Pielou's evenness  ± s.e.", x = "") 
+
+ggsave("output/evenness_se.png", evenness_se, height = 4, width = 5)
+
+############################################################################
+#SHANNON
+############################################################################
+#Run the ANOVA and save it as an object
+aov.shannon.location_store = aov(shannon_entropy ~ location_store, data=meta)
+#Call for the summary of that ANOVA, which will include P-values
+summary(aov.shannon.location_store)
+
+TukeyHSD(aov.shannon.location_store)
+
+levels(meta$location_store)
+#Re-order the groups because the default is alphabetical order
+meta$location_store.ord = factor(meta$location_store, c("1-Basin_Sink_Interior", "3-Basin_Sink_FWJ", "Cold_Room_Drain", "Cold_Room_Storage_Rack", "Deli_Area_Drain", "Deli_Case", "Floor", "Ice_Machine_Drain", "Scale", "Scale-Basin", "Shop_Vac", "Squeegee", "Standing_Water", "Trash", "U_Boat", "Wheeled_Cart"))
+levels(meta$location_store.ord)
+
+#PLOT
+boxplot(shannon_entropy ~ location_store, data=meta, ylab="Shannon Index")
+
+shannon <- ggplot(meta, aes(location_store, shanon_entropy)) + 
+  geom_boxplot() + 
+  #ylim(c(0.5,1)) +
+  theme_q2r() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+ggsave("output/shannon_entropy.png", evenness, height = 3, width = 4)
+
+shannon_summary <- meta %>% # the names of the new data frame and the data frame to be summarised
+  group_by(location_store.ord) %>%   # the grouping variable
+  summarise(mean_shannon = mean(shannon_entropy),  # calculates the mean of each group
+            sd_shannon = sd(shannon_entropy), # calculates the standard deviation of each group
+            n_shannon = n(),  # calculates the sample size per group
+            se_shannon = sd(shannon_entropy)/sqrt(n()))
+
+evenness_se <- ggplot(shannon_summary, aes(location_store.ord, mean_shannon, fill = location_store.ord)) + 
+  geom_col() + 
+  geom_errorbar(aes(ymin = mean_shannon - se_shannon, ymax = mean_shannon + se_shannon), width=0.2) + 
+  theme_q2r() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(legend.title = element_blank()) +
+  labs(y="Shannon index  ± s.e.", x = "") 
+
+ggsave("output/shannon_se.png", evenness_se, height = 4, width = 5)
+
+###################################################################
+#Observed features#
+#################################################################3
+
+#Run the ANOVA and save it as an object
+aov.observed.features.location_store = aov(observed_features~ location_store, data=meta)
+#Call for the summary of that ANOVA, which will include P-values
+summary(aov.observed.features.location_store)
+
+TukeyHSD(aov.observed.features.location_store)
+
+levels(meta$location_store)
+#Re-order the groups because the default is alphabetical order
+meta$location_store.ord = factor(meta$location_store, c("1-Basin_Sink_Interior", "3-Basin_Sink_FWJ", "Cold_Room_Drain", "Cold_Room_Storage_Rack", "Deli_Area_Drain", "Deli_Case", "Floor", "Ice_Machine_Drain", "Scale", "Scale-Basin", "Shop_Vac", "Squeegee", "Standing_Water", "Trash", "U_Boat", "Wheeled_Cart"))
+levels(meta$location_store.ord)
+
+#PLOT
+boxplot(observed_features ~ location_store, data=meta, ylab="Observed Features")
+
+observed_features <- ggplot(meta, aes(location_store, observed_features)) + 
+  geom_boxplot() + 
+  #ylim(c(0.5,1)) +
+  theme_q2r() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+ggsave("output/observed_features.png", evenness, height = 3, width = 4)
+
+observed_features_summary <- meta %>% # the names of the new data frame and the data frame to be summarised
+  group_by(location_store.ord) %>%   # the grouping variable
+  summarise(mean_observed_features = mean(observed_features),  # calculates the mean of each group
+            sd_observed_features = sd(observed_features), # calculates the standard deviation of each group
+            n_observed_features = n(),  # calculates the sample size per group
+            se_observed_features = sd(observed_features)/sqrt(n()))
+
+evenness_se <- ggplot(observed_features_summary, aes(location_store.ord, mean_observed_features, fill = location_store.ord)) + 
+  geom_col() + 
+  geom_errorbar(aes(ymin = mean_observed_features - se_observed_features, ymax = mean_observed_features + se_observed_features), width=0.2) + 
+  theme_q2r() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(legend.title = element_blank()) +
+  labs(y="Observed Features  ± s.e.", x = "") 
+
+ggsave("output/observed_features_se.png", evenness_se, height = 4, width = 5)
+
+################################
+#FAITH
+###############################
+
+#Run the ANOVA and save it as an object
+aov.faith.pd.location_store = aov(faith_pd~ location_store, data=meta)
+#Call for the summary of that ANOVA, which will include P-values
+summary(aov.faith.pd.location_store)
+
+TukeyHSD(aov.faith.pd.location_store)
+
+levels(meta$location_store)
+#Re-order the groups because the default is alphabetical order
+meta$location_store.ord = factor(meta$location_store, c("1-Basin_Sink_Interior", "3-Basin_Sink_FWJ", "Cold_Room_Drain", "Cold_Room_Storage_Rack", "Deli_Area_Drain", "Deli_Case", "Floor", "Ice_Machine_Drain", "Scale", "Scale-Basin", "Shop_Vac", "Squeegee", "Standing_Water", "Trash", "U_Boat", "Wheeled_Cart"))
+levels(meta$location_store.ord)
+
+#PLOT
+boxplot(faith_pd ~ location_store, data=meta, ylab="Faith PD")
+
+faith_pd <- ggplot(meta, aes(location_store, faith_pd)) + 
+  geom_boxplot() + 
+  #ylim(c(0.5,1)) +
+  theme_q2r() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+ggsave("output/faith_pd.png", evenness, height = 3, width = 4)
+
+faith_pd_summary <- meta %>% # the names of the new data frame and the data frame to be summarised
+  group_by(location_store.ord) %>%   # the grouping variable
+  summarise(mean_faith_pd = mean(faith_pd),  # calculates the mean of each group
+            sd_faith_pd = sd(faith_pd), # calculates the standard deviation of each group
+            n_faith_pd = n(),  # calculates the sample size per group
+            se_faith_pd = sd(faith_pd)/sqrt(n()))
+
+faith_pd_se <- ggplot(faith_pd_summary, aes(location_store.ord, mean_faith_pd, fill = location_store.ord)) + 
+  geom_col() + 
+  geom_errorbar(aes(ymin = mean_faith_pd - se_faith_pd, ymax = mean_faith_pd + se_faith_pd), width=0.2) + 
+  theme_q2r() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(legend.title = element_blank()) +
+  labs(y="Faith PD  ± s.e.", x = "") 
+
+ggsave("output/faith_pd_se.png", faith_pd_se, height = 4, width = 5)
