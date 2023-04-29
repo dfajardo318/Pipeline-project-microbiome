@@ -15,7 +15,7 @@ qiime sample-classifier classify-samples \
   --p-estimator RandomForestClassifier \
   --p-n-estimators 50 \
   --p-random-state 123 \
-  --output-dir moving-pictures-classifier
+  --output-dir random-forest
   
   qiime metadata tabulate \
   --m-input-file random-forest/predictions.qza \
