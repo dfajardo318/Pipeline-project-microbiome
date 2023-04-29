@@ -1,0 +1,288 @@
+library(devtools)
+library(tidyverse)
+library(vegan)
+library(qiime2R)
+
+setwd("~/Purdue/Grad School/Microbiome/R/Alpha-beta")
+
+list.files()
+
+if(!dir.exists("output"))
+  dir.create("output")
+
+metadata2 <- read.delim("Metadata_projectRANA.tsv", sep = "\t", header = T, quote = "", stringsAsFactors = F)
+metadata2[1,]
+metadata2[,1]
+metadata2 <- metadata2[-1,]
+
+metadata<-read_q2metadata("Metadata_projectRANA.tsv")
+str(metadata)
+levels(metadata$`location_store`)
+colnames(metadata)[4] <- "location_store"
+colnames(metadata)[5] <- "state"
+str(metadata)
+
+row.names(metadata) <- metadata[,1]
+metadata.without.col1 <- metadata[,-1]
+row.names(metadata) <- metadata$SampleID
+row.names(metadata)
+
+bc_PCoA<-read_qza("bray_curtis_pcoa_results.qza")
+wUF <- read_qza("weighted_unifrac_pcoa_results.qza")
+
+# Now we are going to make our code a little more re-usable
+my_column <- "location_store"
+#my_column <- "DietTreatment"
+
+body_colors <- c("Blue", "Black", "Green", "Gray","Red","Magenta","Yellow","Brown","Pink","Aquamarine", "Darkorchid")
+tim_colors <- c( '#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c',
+                 '#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928', 
+                 "#CBD588", "#5F7FC7", "orange","#DA5724", "#508578", "#CD9BCD",
+                 "#AD6F3B", "#673770","#D14285", "#652926", "#C84248", 
+                 "#8569D5", "#5E738F","#D1A33D", "#8A7C64", "#599861", "gray", "black")
+bc_meta <- bc_PCoA$data$Vectors %>%
+  select(SampleID, PC1, PC2, PC3) %>%
+  inner_join(metadata, by = c("SampleID" = "SampleID"))
+
+bc_centroids <- aggregate(cbind(PC1,PC2)~get(my_column),bc_meta,mean)
+colnames(bc_centroids)[1] <- "location_store"
+
+# Now we are going to make an ordination plot
+ggplot(bc_meta, aes(x=PC1, y=PC2, color=location_store)) +
+  geom_point() + #alpha controls transparency and helps when points are overlapping
+  theme_q2r() +
+  xlab("PC1 (32.27%)") +
+  ylab("PC2 (22.28%)") +
+  scale_color_manual(values=body_colors)
+
+ggplot(bc_meta, aes(x=PC1, y=PC2, color=get(my_column))) +
+  geom_point() + #alpha controls transparency and helps when points are overlapping
+  theme_q2r() +
+  facet_grid(~state) +
+  xlab(paste0("PC1 (", round(100*bc_PCoA$data$ProportionExplained[1], digits = 2), "%)")) +
+  ylab(paste0("PC2 (", round(100*bc_PCoA$data$ProportionExplained[2], digits = 2), "%)")) +
+  scale_color_manual(values=body_colors, name = my_column)
+ggsave(paste0("output/BC-basic_", my_column,".tiff"), height=4, width=10, device="tiff") # save a PDF 3 inches by 4 inches
+
+
+ggplot(bc_meta, aes(x=PC1, y=PC2, color=get(my_column))) +
+  geom_point(aes(shape= state)) + #alpha controls transparency and helps when points are overlapping
+  geom_point(data= bc_centroids, size = 3) + 
+  theme_q2r() +
+  #stat_ellipse(level = 0.95, type = "t") +
+  xlab(paste0("PC1 (", round(100*bc_PCoA$data$ProportionExplained[1], digits = 2), "%)")) +
+  ylab(paste0("PC2 (", round(100*bc_PCoA$data$ProportionExplained[2], digits = 2), "%)")) +
+  scale_color_manual(values=tim_colors, name = my_column)
+ggsave(paste0("output/BC-ellipse_", 'my_column',"-subject.pdf"), height=3, width=5, device="pdf") # save a PDF 3 inches by 4 inches
+
+
+################################################
+#JACCARD
+#####################################
+
+jaccard_PCoA<-read_qza("jaccard_pcoa_results.qza")
+
+jaccard_meta <- jaccard_PCoA$data$Vectors %>%
+  select(SampleID, PC1, PC2, PC3) %>%
+  inner_join(metadata, by = c("SampleID" = "SampleID"))
+
+jaccard_centroids <- aggregate(cbind(PC1,PC2)~get(my_column),jaccard_meta,mean)
+colnames(jaccard_centroids)[1] <- "location_store"
+
+# Now we are going to make an ordination plot
+ggplot(jaccard_meta, aes(x=PC1, y=PC2, color=location_store)) +
+  geom_point() + #alpha controls transparency and helps when points are overlapping
+  theme_q2r() +
+  xlab("PC1 (32.27%)") +
+  ylab("PC2 (22.28%)") +
+  scale_color_manual(values=tim_colors)
+
+ggplot(bc_meta, aes(x=PC1, y=PC2, color=get(my_column))) +
+  geom_point() + #alpha controls transparency and helps when points are overlapping
+  theme_q2r() +
+  facet_grid(~state) +
+  xlab(paste0("PC1 (", round(100*bc_PCoA$data$ProportionExplained[1], digits = 2), "%)")) +
+  ylab(paste0("PC2 (", round(100*bc_PCoA$data$ProportionExplained[2], digits = 2), "%)")) +
+  scale_color_manual(values=tim_colors, name = my_column)
+ggsave(paste0("output/jaccard-basic_", my_column,".tiff"), height=4, width=10, device="tiff")
+
+ggplot(jaccard_meta, aes(x=PC1, y=PC2, color=get(my_column))) +
+  geom_point(aes(shape= state)) + #alpha controls transparency and helps when points are overlapping
+  geom_point(data=jaccard_centroids, size = 3) +
+  theme_q2r() +
+  #stat_ellipse(level = 0.95, type = "t") +
+  xlab(paste0("PC1 (", round(100*bc_PCoA$data$ProportionExplained[1], digits = 2), "%)")) +
+  ylab(paste0("PC2 (", round(100*bc_PCoA$data$ProportionExplained[2], digits = 2), "%)")) +
+  scale_color_manual(values=tim_colors, name = my_column)
+ggsave(paste0("output/jaccard-ellipse_", 'my_column',"-subject.pdf"), height=3, width=5, device="pdf")
+
+#######################################################################################
+#wUNI
+############################################
+
+Wuni_PCoA<-read_qza("weighted_unifrac_pcoa_results.qza")
+
+Wuni_meta <- Wuni_PCoA$data$Vectors %>%
+  select(SampleID, PC1, PC2, PC3) %>%
+  inner_join(metadata, by = c("SampleID" = "SampleID"))
+
+Wuni_centroids <- aggregate(cbind(PC1,PC2)~get(my_column), Wuni_meta,mean)
+colnames(Wuni_centroids)[1] <- "location_store"
+
+# Now we are going to make an ordination plot
+ggplot(Wuni_meta, aes(x=PC1, y=PC2, color=location_store)) +
+  geom_point() + #alpha controls transparency and helps when points are overlapping
+  theme_q2r() +
+  xlab("PC1 (32.27%)") +
+  ylab("PC2 (22.28%)") +
+  scale_color_manual(values=tim_colors)
+
+ggplot(bc_meta, aes(x=PC1, y=PC2, color=get(my_column))) +
+  geom_point() + #alpha controls transparency and helps when points are overlapping
+  theme_q2r() +
+  facet_grid(~state) +
+  xlab(paste0("PC1 (", round(100*bc_PCoA$data$ProportionExplained[1], digits = 2), "%)")) +
+  ylab(paste0("PC2 (", round(100*bc_PCoA$data$ProportionExplained[2], digits = 2), "%)")) +
+  scale_color_manual(values=tim_colors, name = my_column)
+ggsave(paste0("output/Wuni-basic_", my_column,".tiff"), height=4, width=10, device="tiff")
+
+ggplot(Wuni_meta, aes(x=PC1, y=PC2, color=get(my_column))) +
+  geom_point(aes(shape= state)) + #alpha controls transparency and helps when points are overlapping
+  geom_point(data=Wuni_centroids, size = 3) +
+  theme_q2r() +
+  #stat_ellipse(level = 0.95, type = "t") +
+  xlab(paste0("PC1 (", round(100*bc_PCoA$data$ProportionExplained[1], digits = 2), "%)")) +
+  ylab(paste0("PC2 (", round(100*bc_PCoA$data$ProportionExplained[2], digits = 2), "%)")) +
+  scale_color_manual(values=tim_colors, name = my_column)
+ggsave(paste0("output/Wuni-ellipse_", 'my_column',"-subject.pdf"), height=3, width=5, device="pdf")
+
+#######################################################################3
+#UWuni
+#######################################################################
+
+UWuni_PCoA<-read_qza("unweighted_unifrac_pcoa_results.qza")
+
+UWuni_meta <- UWuni_PCoA$data$Vectors %>%
+  select(SampleID, PC1, PC2, PC3) %>%
+  inner_join(metadata, by = c("SampleID" = "SampleID"))
+
+UWuni_centroids <- aggregate(cbind(PC1,PC2)~get(my_column), UWuni_meta,mean)
+colnames(UWuni_centroids)[1] <- "location_store"
+
+# Now we are going to make an ordination plot
+ggplot(UWuni_meta, aes(x=PC1, y=PC2, color=location_store)) +
+  geom_point() + #alpha controls transparency and helps when points are overlapping
+  theme_q2r() +
+  xlab("PC1 (32.27%)") +
+  ylab("PC2 (22.28%)") +
+  scale_color_manual(values=tim_colors)
+
+ggplot(UWuni_meta, aes(x=PC1, y=PC2, color=get(my_column))) +
+  geom_point() + #alpha controls transparency and helps when points are overlapping
+  theme_q2r() +
+  facet_grid(~state) +
+  xlab(paste0("PC1 (", round(100*bc_PCoA$data$ProportionExplained[1], digits = 2), "%)")) +
+  ylab(paste0("PC2 (", round(100*bc_PCoA$data$ProportionExplained[2], digits = 2), "%)")) +
+  scale_color_manual(values=tim_colors, name = my_column)
+ggsave(paste0("output/UWuni-basic_", my_column,".tiff"), height=4, width=10, device="tiff")
+
+ggplot(UWuni_meta, aes(x=PC1, y=PC2, color=get(my_column))) +
+  geom_point(aes(shape= state)) + #alpha controls transparency and helps when points are overlapping
+  geom_point(data=UWuni_centroids, size = 3) +
+  theme_q2r() +
+  #stat_ellipse(level = 0.95, type = "t") +
+  xlab(paste0("PC1 (", round(100*bc_PCoA$data$ProportionExplained[1], digits = 2), "%)")) +
+  ylab(paste0("PC2 (", round(100*bc_PCoA$data$ProportionExplained[2], digits = 2), "%)")) +
+  scale_color_manual(values=tim_colors, name = my_column)
+ggsave(paste0("output/UWuni-ellipse_", 'my_column',"-subject.pdf"), height=3, width=5, device="pdf")
+
+#################################################################################
+
+bc_dist_mat<-read_qza("bray_curtis_distance_matrix.qza")
+bc_dm <- as.matrix(bc_dist_mat$data) 
+rownames(bc_dm) == metadata$SampleID ## all these values need to be "TRUE"
+metadata_sub <- metadata[match(rownames(bc_dm),metadata$SampleID),]
+rownames(bc_dm) == metadata_sub$SampleID ## all these values need to be "TRUE"
+
+PERMANOVA_out <- adonis2(bc_dm ~ location_store, data = metadata_sub)
+
+write.table(PERMANOVA_out,"output/location_Store_Adonis_overall.csv",sep=",", row.names = TRUE) 
+
+####################################################################################
+##  Pairwise adonis function
+##  we can also perform a pairwise comparison with the function 
+##  Pairwise Adonis funtion by edro Martinez Arbizu & Sylvain Monteux
+##  https://github.com/pmartinezarbizu/pairwiseAdonis/blob/master/pairwiseAdonis/R/pairwise.adonis.R
+#######################################################################################
+
+pairwise.adonis2 <- function(x, data, strata = NULL, nperm=999, ... ) {
+  
+  #describe parent call function 
+  ststri <- ifelse(is.null(strata),'Null',strata)
+  fostri <- as.character(x)
+  #list to store results
+  
+  #copy model formula
+  x1 <- x
+  # extract left hand side of formula
+  lhs <- x1[[2]]
+  # extract factors on right hand side of formula 
+  rhs <- x1[[3]]
+  # create model.frame matrix  
+  x1[[2]] <- NULL   
+  rhs.frame <- model.frame(x1, data, drop.unused.levels = TRUE) 
+  
+  # create unique pairwise combination of factors 
+  co <- combn(unique(as.character(rhs.frame[,1])),2)
+  
+  # create names vector   
+  nameres <- c('parent_call')
+  for (elem in 1:ncol(co)){
+    nameres <- c(nameres,paste(co[1,elem],co[2,elem],sep='_vs_'))
+  }
+  #create results list  
+  res <- vector(mode="list", length=length(nameres))
+  names(res) <- nameres
+  
+  #add parent call to res 
+  res['parent_call'] <- list(paste(fostri[2],fostri[1],fostri[3],', strata =',ststri, ', permutations',nperm ))
+  
+  
+  #start iteration trough pairwise combination of factors  
+  for(elem in 1:ncol(co)){
+    
+    #reduce model elements  
+    if(inherits(eval(lhs),'dist')){	
+      xred <- as.dist(as.matrix(eval(lhs))[rhs.frame[,1] %in% c(co[1,elem],co[2,elem]),
+                                           rhs.frame[,1] %in% c(co[1,elem],co[2,elem])])
+    }else{
+      xred <- eval(lhs)[rhs.frame[,1] %in% c(co[1,elem],co[2,elem]),]
+    }
+    
+    mdat1 <-  data[rhs.frame[,1] %in% c(co[1,elem],co[2,elem]),] 
+    
+    # redefine formula
+    if(length(rhs) == 1){
+      xnew <- as.formula(paste('xred',as.character(rhs),sep='~'))	
+    }else{
+      xnew <- as.formula(paste('xred' , 
+                               paste(rhs[-1],collapse= as.character(rhs[1])),
+                               sep='~'))}
+    
+    #pass new formula to adonis
+    if(is.null(strata)){
+      ad <- adonis2(xnew,data=mdat1, ... )
+    }else{
+      perm <- how(nperm = nperm)
+      setBlocks(perm) <- with(mdat1, mdat1[,ststri])
+      ad <- adonis2(xnew,data=mdat1,permutations = perm, ... )}
+    
+    res[nameres[elem+1]] <- list(ad[1:5])
+  }
+  #names(res) <- names  
+  class(res) <- c("pwadstrata", "list")
+  return(res)
+} 
+
+bc_location_store_Pair <- pairwise.adonis2(bc_dm ~ location_store, data = metadata_sub)
+write.table(bc_location_store_Pair,"output/bc_location_store_Adonis_pairwise.csv",sep=",", row.names = TRUE) 
