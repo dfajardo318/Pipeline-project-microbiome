@@ -1,0 +1,114 @@
+module load bioinfo
+module load Qiime/2-2022.8
+module list
+
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path manifest_file_RANA.txt \
+  --output-path demux.qza \
+  --input-format PairedEndFastqManifestPhred33V2
+
+qiime tools import \
+--type 'SampleData[PairedEndSequencesWithQuality]' \
+--input-path manifest_file_RANA.txt \
+--input-format PairedEndFastqManifestPhred33V2 \
+--output-path demux.qza
+
+qiime tools import \
+--type 'SampleData[PairedEndSequencesWithQuality]' \
+--input-path manifest_file_RANA.txt \
+--input-format PairedEndFastqManifestPhred33V2 \
+--output-path demux.qza
+
+qiime dada2 denoise-paired \
+  --i-demultiplexed-seqs demux.qza \
+  --p-trim-left-f 25 \
+  --p-trim-left-r 13 \
+  --p-trunc-len-f 260 \
+  --p-trunc-len-r 223 \
+  --p-n-threads 0 \
+  --o-representative-sequences rep-seqs.qza \
+  --o-table table.qza \
+  --o-denoising-stats stats-dada2.qza
+
+qiime metadata tabulate \
+  --m-input-file stats-dada2.qza \
+  --o-visualization stats-dada2.qzv
+
+qiime feature-table summarize \
+  --i-table table.qza \
+  --o-visualization table.qzv \
+  --m-sample-metadata-file Metadata_projectRANA.tsv
+  
+qiime feature-table tabulate-seqs \
+  --i-data rep-seqs.qza \
+  --o-visualization rep-seqs.qzv
+
+qiime phylogeny align-to-tree-mafft-fasttree \
+  --i-sequences rep-seqs.qza \
+  --o-alignment aligned-rep-seqs.qza \
+  --o-masked-alignment masked-aligned-rep-seqs.qza \
+  --o-tree unrooted-tree.qza \
+  --o-rooted-tree rooted-tree.qza
+
+qiime diversity alpha-rarefaction \
+  --i-table table.qza \
+  --i-phylogeny rooted-tree.qza \
+  --p-max-depth 140954 \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --o-visualization alpha-rarefaction.qzv
+
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny rooted-tree.qza \
+  --i-table table.qza \
+  --p-sampling-depth 31315 \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --output-dir core-metrics-results
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/faith_pd_vector.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --o-visualization core-metrics-results/faith-pd-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/evenness_vector.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --o-visualization core-metrics-results/evenness-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/shannon_vector.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --o-visualization core-metrics-results/shannon-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/observed_features_vector.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --o-visualization core-metrics-results/observed_features-group-significance.qzv
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --m-metadata-column location_store \
+  --o-visualization core-metrics-results/unweighted-unifrac-locst-significance.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --m-metadata-column location_store \
+  --o-visualization core-metrics-results/weighted-unifrac-locst-group-significance.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --m-metadata-column location_store \
+  --o-visualization core-metrics-results/bray-curtis-locst-group-significance.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/jaccard_distance_matrix.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --m-metadata-column location_store \
+  --o-visualization core-metrics-results/jaccard-locst-group-significance.qzv \
+  --p-pairwise
