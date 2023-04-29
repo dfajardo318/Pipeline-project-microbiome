@@ -1,0 +1,69 @@
+module load bioinfo
+module load Qiime/2-2022.8
+module list
+
+wget https://data.qiime2.org/2022.8/common/silva-138-99-seqs.qza
+wget https://data.qiime2.org/2022.8/common/silva-138-99-tax.qza
+
+#Depending on project and sire identified change primers and length
+#In my case I analayzed v3-v4 and trained my classifier accordingly
+
+#CLASSIFIER
+
+qiime feature-classifier extract-reads \
+--i-sequences silva-138-99-seqs.qza \
+--p-f-primer CCTACGGGNGGCWGCAG  \
+--p-r-primer GACTACHVGGGTATCTAATCC  \
+--p-min-length 230  \  #amplicon length -150 an +150 for this project is between 380-420
+--p-max-length 570 \
+--p-n-jobs 12 \
+--o-reads ref-seqs-v4.qza #Her I forgot to change name for v3v4 region
+
+qiime feature-classifier extract-reads \
+--i-sequences silva-138-99-seqs.qza \
+--p-f-primer GTGCCAGCMGCCGCGGTAA  \
+--p-r-primer GGACTACHVGGGTWTCTAAT  \
+--p-min-length 100  \
+--p-max-length 400 \
+--p-n-jobs 12 \
+--o-reads ref-seqs-v4.qza 
+
+#TAXA-BARPLOTS
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier silva-classifier.qza \
+  --i-reads rep-seqs.qza \
+  --o-classification taxonomy.qza
+
+qiime metadata tabulate \
+  --m-input-file taxonomy.qza \
+  --o-visualization taxonomy.qzv
+
+qiime taxa barplot \
+  --i-table table.qza \
+  --i-taxonomy taxonomy.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --o-visualization taxa-bar-plots.qzv
+
+#ANCOM
+
+--i-table comp-table.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --m-metadata-column location_store \
+  --o-visualization ancom-locst.qzv
+
+qiime taxa collapse \
+  --i-table table.qza \
+  --i-taxonomy taxonomy.qza \
+  --p-level 6 \
+  --o-collapsed-table table-l6.qza
+
+qiime composition add-pseudocount \
+  --i-table table-l6.qza \
+  --o-composition-table comp-table-l6.qza
+
+qiime composition ancom \
+  --i-table comp-table-l6.qza \
+  --m-metadata-file Metadata_projectRANA.tsv \
+  --m-metadata-column location_store \
+  --o-visualization l6-ancom-locst.qzv
